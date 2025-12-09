@@ -1,0 +1,795 @@
+[
+    {
+        "id": "236b51cfcad6d00c",
+        "type": "tab",
+        "label": "Wales River Dashboard",
+        "disabled": false,
+        "info": ""
+    },
+    {
+        "id": "a5f72a7c5649b195",
+        "type": "inject",
+        "z": "236b51cfcad6d00c",
+        "name": "Refresh every 2 s (and on start)",
+        "props": [
+            {
+                "p": "payload"
+            }
+        ],
+        "repeat": "2",
+        "crontab": "",
+        "once": true,
+        "onceDelay": "0.3",
+        "topic": "",
+        "payload": "",
+        "payloadType": "date",
+        "x": 200,
+        "y": 140,
+        "wires": [
+            [
+                "c22fa980ea48e802"
+            ]
+        ]
+    },
+    {
+        "id": "f463401cf18a38cf",
+        "type": "http request",
+        "z": "236b51cfcad6d00c",
+        "name": "NRW StationData/historical",
+        "method": "GET",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [
+            {
+                "keyType": "other",
+                "keyValue": "Ocp-Apim-Subscription-Key",
+                "valueType": "other",
+                "valueValue": "07322214f498442589d655260b268ad4"
+            }
+        ],
+        "x": 740,
+        "y": 220,
+        "wires": [
+            [
+                "9b169da8e1974394",
+                "0fbba1668aff429d"
+            ]
+        ]
+    },
+    {
+        "id": "9b169da8e1974394",
+        "type": "function",
+        "z": "236b51cfcad6d00c",
+        "name": "Pick latest river level (cm)",
+        "func": "// --- 1. Basic checks ---\nif (msg.statusCode && msg.statusCode !== 200) {\n    node.warn(`HTTP ${msg.statusCode}`);\n    node.status({ fill: \"red\", shape: \"ring\", text: `HTTP ${msg.statusCode}` });\n    return null;\n}\n\nlet p = msg.payload || {};\n\n// --- 2. Read readings ---\nlet readings = Array.isArray(p.parameterReadings) ? p.parameterReadings : [];\n\n// --- 3. Station metadata ---\nlet stationName = p.nameEN || p.titleEN || \"Unknown station\";\nlet locationId  = p.location;\nlet statusEN    = p.statusEN || p.parameterStatusEN;\nlet paramName   = p.paramNameEN || p.titleEN || \"River level\";\nlet units       = p.units || \"m\";\n\n// Coordinates\nlet lat = p.latitude;\nlet lon = p.longitude;\nif ((lat == null || lon == null) && p.coordinates) {\n    lat = p.coordinates.latitude;\n    lon = p.coordinates.longitude;\n}\n\n// --- 4. Latest reading (last element) ---\nlet latestValM = null;\nlet latestTime = null;\n\nif (readings.length > 0) {\n    const latest = readings[readings.length - 1];\n    latestValM = Number(latest.value);  // NRW uses 'value'\n    latestTime = latest.time || null;\n}\n\nlet latestCm = null;\nif (latestValM != null && !isNaN(latestValM)) {\n    latestCm = latestValM * 100.0;     // m → mm/10 → cm\n    latestCm = Number(latestCm.toFixed(2));\n}\n\n// --- 5. Build clean payload ---\nmsg.payload = {\n    station: stationName,\n    location: locationId,\n    status: statusEN,\n    parameter: paramName,\n    units: units,\n    lat: lat,\n    lon: lon,\n    latest_m: latestValM,\n    latest_cm: latestCm,\n    latest_time: latestTime,\n    readings_count: readings.length\n};\n\n// Expose for other nodes\nmsg.lat = lat;\nmsg.lon = lon;\nmsg.units = units;\n\n// --- 6. Status text under node ---\nnode.status({\n    fill: latestCm != null ? \"green\" : \"yellow\",\n    shape: \"dot\",\n    text: (stationName || \"?\") + \n          \" | \" + readings.length + \" readings, latest \" +\n          (latestCm != null ? latestCm.toFixed(2) + \" cm\" : \"N/A\")\n});\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 1030,
+        "y": 220,
+        "wires": [
+            [
+                "346039b3cbdab866",
+                "db316d72048487c1",
+                "768769f2237dc30a",
+                "94f07caf05930dce",
+                "dfa357c94795bd28",
+                "9ddf4c51c9730ab4",
+                "0e449278fbe61318"
+            ]
+        ]
+    },
+    {
+        "id": "346039b3cbdab866",
+        "type": "change",
+        "z": "236b51cfcad6d00c",
+        "name": "→ level_cm",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.latest_cm",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1270,
+        "y": 100,
+        "wires": [
+            [
+                "d9958e77dfbdc395"
+            ]
+        ]
+    },
+    {
+        "id": "d9958e77dfbdc395",
+        "type": "ui_gauge",
+        "z": "236b51cfcad6d00c",
+        "name": "",
+        "group": "ui_group_wales",
+        "order": 1,
+        "width": 12,
+        "height": 5,
+        "gtype": "gage",
+        "title": "River level (cm)",
+        "label": "cm",
+        "format": "{{value | number:2}}",
+        "min": 0,
+        "max": "500",
+        "colors": [
+            "#4CAF50",
+            "#FFC107",
+            "#E53935"
+        ],
+        "seg1": "300",
+        "seg2": "400",
+        "className": "",
+        "x": 1580,
+        "y": 100,
+        "wires": []
+    },
+    {
+        "id": "db316d72048487c1",
+        "type": "change",
+        "z": "236b51cfcad6d00c",
+        "name": "→ station name",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.station",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1280,
+        "y": 180,
+        "wires": [
+            [
+                "d4bb170cd0eee4c1"
+            ]
+        ]
+    },
+    {
+        "id": "d4bb170cd0eee4c1",
+        "type": "ui_text",
+        "z": "236b51cfcad6d00c",
+        "group": "611cd32229c41753",
+        "order": 6,
+        "width": 6,
+        "height": 2,
+        "name": "",
+        "label": "Station",
+        "format": "{{msg.payload}}",
+        "layout": "col-center",
+        "className": "",
+        "style": true,
+        "font": "Georgia,Georgia,serif",
+        "fontSize": "17",
+        "color": "#FFFFFF",
+        "x": 1590,
+        "y": 180,
+        "wires": []
+    },
+    {
+        "id": "768769f2237dc30a",
+        "type": "change",
+        "z": "236b51cfcad6d00c",
+        "name": "→ status",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.status",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1270,
+        "y": 240,
+        "wires": [
+            [
+                "ca75fbf11f6f0f90"
+            ]
+        ]
+    },
+    {
+        "id": "ca75fbf11f6f0f90",
+        "type": "ui_text",
+        "z": "236b51cfcad6d00c",
+        "group": "611cd32229c41753",
+        "order": 4,
+        "width": 6,
+        "height": 2,
+        "name": "",
+        "label": "Station status",
+        "format": "{{msg.payload}}",
+        "layout": "col-center",
+        "className": "",
+        "style": true,
+        "font": "Georgia,Georgia,serif",
+        "fontSize": "16",
+        "color": "#BBBBBB",
+        "x": 1590,
+        "y": 240,
+        "wires": []
+    },
+    {
+        "id": "94f07caf05930dce",
+        "type": "change",
+        "z": "236b51cfcad6d00c",
+        "name": "→ parameter",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.parameter",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1280,
+        "y": 300,
+        "wires": [
+            [
+                "056b2c4ffb9080b8"
+            ]
+        ]
+    },
+    {
+        "id": "056b2c4ffb9080b8",
+        "type": "ui_text",
+        "z": "236b51cfcad6d00c",
+        "group": "611cd32229c41753",
+        "order": 5,
+        "width": 6,
+        "height": 2,
+        "name": "",
+        "label": "Parameter",
+        "format": "{{msg.payload}} ({{msg.units}})",
+        "layout": "col-center",
+        "className": "",
+        "style": true,
+        "font": "Georgia,Georgia,serif",
+        "fontSize": "15",
+        "color": "#BBBBBB",
+        "x": 1590,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "dfa357c94795bd28",
+        "type": "change",
+        "z": "236b51cfcad6d00c",
+        "name": "→ chart (level_cm)",
+        "rules": [
+            {
+                "t": "set",
+                "p": "topic",
+                "pt": "msg",
+                "to": "payload.station",
+                "tot": "msg"
+            },
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.latest_cm",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1290,
+        "y": 380,
+        "wires": [
+            [
+                "a557c77dd7beecae"
+            ]
+        ]
+    },
+    {
+        "id": "0fbba1668aff429d",
+        "type": "debug",
+        "z": "236b51cfcad6d00c",
+        "name": "HTTP payload",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "true",
+        "targetType": "full",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1040,
+        "y": 300,
+        "wires": []
+    },
+    {
+        "id": "9ddf4c51c9730ab4",
+        "type": "ui_template",
+        "z": "236b51cfcad6d00c",
+        "group": "611cd32229c41753",
+        "name": "Satellite Map",
+        "order": 8,
+        "width": 12,
+        "height": 7,
+        "format": "<link rel=\"stylesheet\" href=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.css\" />\n<script src=\"https://unpkg.com/leaflet@1.9.4/dist/leaflet.js\"></script>\n\n<div id=\"wales-map\" style=\"width: 100%; height: 350px; margin-top:10px;\"></div>\n\n<script>\n(function(scope) {\n    let map, marker;\n\n    scope.$watch('msg', function(msg) {\n        if (!msg) return;\n\n        const lat = msg.lat;\n        const lon = msg.lon;\n\n        if (lat == null || lon == null) {\n            return; // nothing to show yet\n        }\n\n        if (!map) {\n            map = L.map('wales-map').setView([lat, lon], 13);\n\n            L.tileLayer(\n                'https://server.arcgisonline.com/ArcGIS/rest/services/' +\n                'World_Imagery/MapServer/tile/{z}/{y}/{x}',\n                {\n                    maxZoom: 19\n                }\n            ).addTo(map);\n\n            marker = L.marker([lat, lon]).addTo(map);\n        } else {\n            map.setView([lat, lon], map.getZoom());\n            marker.setLatLng([lat, lon]);\n        }\n\n        if (msg.payload && msg.payload.station) {\n            marker.bindPopup(msg.payload.station).openPopup();\n        }\n    });\n})(scope);\n</script>\n",
+        "storeOutMessages": true,
+        "fwdInMessages": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 1590,
+        "y": 340,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "fcb3fc16f742f14b",
+        "type": "ui_dropdown",
+        "z": "236b51cfcad6d00c",
+        "name": "",
+        "label": "Select Station",
+        "tooltip": "",
+        "place": "Select a station…",
+        "group": "611cd32229c41753",
+        "order": 1,
+        "width": 6,
+        "height": 1,
+        "passthru": true,
+        "multiple": false,
+        "options": [
+            {
+                "label": "Cellan",
+                "value": "1122",
+                "type": "str"
+            },
+            {
+                "label": "Penuwch",
+                "value": "1125",
+                "type": "str"
+            },
+            {
+                "label": "Rhos Ymryson",
+                "value": "1127",
+                "type": "str"
+            },
+            {
+                "label": "Abergorlech",
+                "value": "1128",
+                "type": "str"
+            },
+            {
+                "label": "Caio",
+                "value": "1129",
+                "type": "str"
+            },
+            {
+                "label": "Cynghordy",
+                "value": "1130",
+                "type": "str"
+            },
+            {
+                "label": "Myddfai",
+                "value": "1132",
+                "type": "str"
+            },
+            {
+                "label": "Nant Y Maen",
+                "value": "1133",
+                "type": "str"
+            },
+            {
+                "label": "Ystradffin No1",
+                "value": "1136",
+                "type": "str"
+            },
+            {
+                "label": "Talsarn",
+                "value": "4129",
+                "type": "str"
+            },
+            {
+                "label": "Craig Clungwyn",
+                "value": "4194",
+                "type": "str"
+            },
+            {
+                "label": "Ddol Las",
+                "value": "4195",
+                "type": "str"
+            },
+            {
+                "label": "Dolau Hirion",
+                "value": "4196",
+                "type": "str"
+            },
+            {
+                "label": "Felin Y Cwm",
+                "value": "4198",
+                "type": "str"
+            },
+            {
+                "label": "Llandovery",
+                "value": "4201",
+                "type": "str"
+            },
+            {
+                "label": "Llangadog",
+                "value": "4202",
+                "type": "str"
+            },
+            {
+                "label": "Llanwrda",
+                "value": "4203",
+                "type": "str"
+            },
+            {
+                "label": "Llyn Brianne Reservoir",
+                "value": "4204",
+                "type": "str"
+            },
+            {
+                "label": "Pont Felindre",
+                "value": "4206",
+                "type": "str"
+            },
+            {
+                "label": "Ystradffin",
+                "value": "4209",
+                "type": "str"
+            },
+            {
+                "label": "Pont Llanio",
+                "value": "4213",
+                "type": "str"
+            },
+            {
+                "label": "Tregaron",
+                "value": "4216",
+                "type": "str"
+            }
+        ],
+        "payload": "",
+        "topic": "station",
+        "topicType": "str",
+        "className": "",
+        "x": 140,
+        "y": 300,
+        "wires": [
+            [
+                "c22fa980ea48e802",
+                "89eafa9b9cdb3570"
+            ]
+        ]
+    },
+    {
+        "id": "c22fa980ea48e802",
+        "type": "function",
+        "z": "236b51cfcad6d00c",
+        "name": "Build NRW request",
+        "func": "// msg.payload is station id when chosen from dropdown.\n// Save it in flow context so timer inject can reuse.\n\nlet stationId;\n\nif (typeof msg.payload === \"string\" && msg.payload.trim() !== \"\") {\n    stationId = msg.payload.trim();\n    flow.set(\"selectedStation\", stationId);\n} else {\n    stationId = flow.get(\"selectedStation\") || \"4195\"; // default at startup\n}\n\nlet parameter = \"166\"; // river level parameter id\n\nconst base = \"https://api.naturalresources.wales/rivers-and-seas/v1/api/StationData/historical\";\n\nmsg.method = \"GET\";\nmsg.url = base + \"?location=\" + stationId + \"&parameter=\" + parameter;\n\nreturn msg;\n",
+        "outputs": 1,
+        "timeout": 0,
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 490,
+        "y": 220,
+        "wires": [
+            [
+                "f463401cf18a38cf"
+            ]
+        ]
+    },
+    {
+        "id": "89eafa9b9cdb3570",
+        "type": "debug",
+        "z": "236b51cfcad6d00c",
+        "name": "Dropdown out",
+        "active": false,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 480,
+        "y": 360,
+        "wires": []
+    },
+    {
+        "id": "0e449278fbe61318",
+        "type": "change",
+        "z": "236b51cfcad6d00c",
+        "name": "→ latest_cm for alert",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "payload.latest_cm",
+                "tot": "msg"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1280,
+        "y": 460,
+        "wires": [
+            [
+                "1ee63b6e01f84cd0"
+            ]
+        ]
+    },
+    {
+        "id": "1ee63b6e01f84cd0",
+        "type": "switch",
+        "z": "236b51cfcad6d00c",
+        "name": "level > 70 ?",
+        "property": "payload",
+        "propertyType": "msg",
+        "rules": [
+            {
+                "t": "gt",
+                "v": "70",
+                "vt": "num"
+            }
+        ],
+        "checkall": "true",
+        "repair": false,
+        "outputs": 1,
+        "x": 1510,
+        "y": 460,
+        "wires": [
+            [
+                "83b7846232ac3520"
+            ]
+        ]
+    },
+    {
+        "id": "83b7846232ac3520",
+        "type": "change",
+        "z": "236b51cfcad6d00c",
+        "name": "HIGH > 70 mm",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "\"HIGH ( > 70 mm )\"",
+                "tot": "json"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1760,
+        "y": 440,
+        "wires": [
+            [
+                "649f8dfd21ba76e5"
+            ]
+        ]
+    },
+    {
+        "id": "872138d15620d74b",
+        "type": "change",
+        "z": "236b51cfcad6d00c",
+        "name": "Normal",
+        "rules": [
+            {
+                "t": "set",
+                "p": "payload",
+                "pt": "msg",
+                "to": "\"Normal (≤ 300 mm)\"",
+                "tot": "json"
+            }
+        ],
+        "action": "",
+        "property": "",
+        "from": "",
+        "to": "",
+        "reg": false,
+        "x": 1750,
+        "y": 480,
+        "wires": [
+            [
+                "649f8dfd21ba76e5"
+            ]
+        ]
+    },
+    {
+        "id": "649f8dfd21ba76e5",
+        "type": "ui_text",
+        "z": "236b51cfcad6d00c",
+        "group": "611cd32229c41753",
+        "order": 7,
+        "width": 6,
+        "height": 2,
+        "name": "",
+        "label": "Alert",
+        "format": "{{msg.payload}}",
+        "layout": "col-center",
+        "className": "",
+        "style": true,
+        "font": "Georgia,Georgia,serif",
+        "fontSize": "16",
+        "color": "#ffb74d",
+        "x": 1980,
+        "y": 460,
+        "wires": []
+    },
+    {
+        "id": "8f220a9d26afa96d",
+        "type": "ui_switch",
+        "z": "236b51cfcad6d00c",
+        "name": "",
+        "label": "Dark mode",
+        "tooltip": "",
+        "group": "611cd32229c41753",
+        "order": 2,
+        "width": 3,
+        "height": 1,
+        "passthru": true,
+        "decouple": "false",
+        "topic": "darkmode",
+        "topicType": "str",
+        "style": "",
+        "onvalue": "true",
+        "onvalueType": "bool",
+        "onicon": "",
+        "oncolor": "",
+        "offvalue": "false",
+        "offvalueType": "bool",
+        "officon": "",
+        "offcolor": "",
+        "animate": true,
+        "className": "",
+        "x": 130,
+        "y": 420,
+        "wires": [
+            [
+                "aa67e65456db9dec"
+            ]
+        ]
+    },
+    {
+        "id": "aa67e65456db9dec",
+        "type": "ui_template",
+        "z": "236b51cfcad6d00c",
+        "group": "611cd32229c41753",
+        "name": "Dashboard theme",
+        "order": 3,
+        "width": 3,
+        "height": 1,
+        "format": "<style>\n  body.dark-mode {\n    background-color: #121212 !important;\n    color: #EEEEEE !important;\n  }\n  body.dark-mode .nr-dashboard-card {\n    background-color: #1E1E1E !important;\n    color: #EEEEEE !important;\n  }\n  body.dark-mode md-toolbar,\n  body.dark-mode md-sidenav {\n    background-color: #1F2933 !important;\n  }\n</style>\n\n<script>\n(function(scope) {\n  scope.$watch('msg', function(msg) {\n    if (!msg) return;\n    var dark = (msg.payload === true);\n    if (dark) {\n      document.body.classList.add('dark-mode');\n    } else {\n      document.body.classList.remove('dark-mode');\n    }\n  });\n})(scope);\n</script>\n",
+        "storeOutMessages": false,
+        "fwdInMessages": true,
+        "resendOnRefresh": true,
+        "templateScope": "local",
+        "className": "",
+        "x": 810,
+        "y": 420,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "a557c77dd7beecae",
+        "type": "ui_chart",
+        "z": "236b51cfcad6d00c",
+        "name": "",
+        "group": "ui_group_wales",
+        "order": 2,
+        "width": 0,
+        "height": 0,
+        "label": "River Level History",
+        "chartType": "line",
+        "legend": "true",
+        "xformat": "HH:mm:ss",
+        "interpolate": "linear",
+        "nodata": "",
+        "dot": false,
+        "ymin": "0",
+        "ymax": "500",
+        "removeOlder": 1,
+        "removeOlderPoints": "1000",
+        "removeOlderUnit": "3600",
+        "cutout": 0,
+        "useOneColor": false,
+        "useUTC": false,
+        "colors": [
+            "#1f77b4",
+            "#aec7e8",
+            "#ff7f0e",
+            "#2ca02c",
+            "#98df8a",
+            "#d62728",
+            "#ff9896",
+            "#9467bd",
+            "#c5b0d5"
+        ],
+        "outputs": 1,
+        "useDifferentColor": false,
+        "className": "",
+        "x": 1600,
+        "y": 400,
+        "wires": [
+            []
+        ]
+    },
+    {
+        "id": "ui_group_wales",
+        "type": "ui_group",
+        "name": "River Live",
+        "tab": "ui_tab_wales",
+        "order": 1,
+        "disp": true,
+        "width": "12",
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "611cd32229c41753",
+        "type": "ui_group",
+        "name": "Map",
+        "tab": "ui_tab_wales",
+        "order": 2,
+        "disp": true,
+        "width": "12",
+        "collapse": false,
+        "className": ""
+    },
+    {
+        "id": "ui_tab_wales",
+        "type": "ui_tab",
+        "name": "Wales River",
+        "icon": "dashboard",
+        "order": 1,
+        "disabled": false,
+        "hidden": false
+    }
+]
